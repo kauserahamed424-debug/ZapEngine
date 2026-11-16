@@ -43,13 +43,13 @@ dependencies {
 }
 
 // JitPack publishing — consumers add the library with one line:
-//   implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.1")
+//   implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.2")
 publishing {
     publications {
         register<MavenPublication>("release") {
             groupId = "com.github.kauserahamed424-debug"
             artifactId = "ZapEngine"
-            version = "1.0.1"
+            version = "1.0.2"
             afterEvaluate {
                 from(components["release"])
             }
