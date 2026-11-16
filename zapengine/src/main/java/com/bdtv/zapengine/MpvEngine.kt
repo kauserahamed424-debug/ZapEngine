@@ -25,7 +25,7 @@ import java.io.File
  *  - demuxer-lavf-o carries ONLY live_start_index=-1 (start at the live edge)
  *  - probe tuning is BANNED (probesize/analyzeduration stay default)
  *  - hwdec=mediacodec-copy with ONE internal software-decoder retry per load
- *  - panscan=1.0 (picture fills the screen), keep-open=yes
+ *  - keepaspect=no + panscan=0.0 (stretch-to-fill: no bars, no crop), keep-open=yes
  */
 class MpvEngine(private val context: Context) : Engine {
 
@@ -196,7 +196,10 @@ class ZapMpvView(context: Context, attrs: AttributeSet? = null) :
             "stream-lavf-o",
             "reconnect=1,reconnect_streamed=1,reconnect_delay_max=5"
         )
-        mpv.setOptionString("panscan", "1.0")
+        // House rule (all three engines): STRETCH to the exact surface —
+        // no side bars, nothing cropped off the top/bottom.
+        mpv.setOptionString("keepaspect", "no")
+        mpv.setOptionString("panscan", "0.0")
         mpv.setOptionString("keep-open", "yes")
         mpv.setOptionString("msg-level", "all=warn")
     }

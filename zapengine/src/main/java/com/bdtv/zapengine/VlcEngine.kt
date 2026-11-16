@@ -11,7 +11,7 @@ import org.videolan.libvlc.util.VLCVideoLayout
 /**
  * libVLC 3.6.2 — the COVERAGE engine (plays nearly everything, incl. alixbd).
  * Locked tuning from the BDTv dual-engine builds: :network-caching=1500,
- * :http-reconnect, Chrome user-agent, per-media referer, crop-to-fill.
+ * :http-reconnect, Chrome user-agent, per-media referer, stretch-to-fill.
  */
 class VlcEngine(private val context: Context) : Engine {
 
@@ -34,7 +34,7 @@ class VlcEngine(private val context: Context) : Engine {
         val mp = MediaPlayer(vlc)
         mediaPlayer = mp
         mp.attachViews(layout, null, false, false)
-        // Re-apply crop-to-fill whenever the layout gets its real size:
+        // Re-apply the stretch-to-fill whenever the layout gets its real size:
         // load() usually runs before the first layout pass (w/h still 0),
         // so without this the fill call in load() silently does nothing.
         layout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyFill() }
@@ -74,13 +74,13 @@ class VlcEngine(private val context: Context) : Engine {
         req.referer?.let { media.addOption(":http-referrer=$it") }
         mp.media = media
         media.release()
-        // Crop-to-fill: stretch picture to the whole screen, no side bars.
+        // Stretch-to-fill: picture takes the whole screen, no side bars, no crop.
         mp.setVideoTrackEnabled(true)
         mp.play()
         applyFill()
     }
 
-    /** VLC crop-to-fill; also re-applied automatically on every layout change. */
+    /** VLC stretch-to-fill; also re-applied automatically on every layout change. */
     fun applyFill() {
         val mp = mediaPlayer ?: return
         val w = layout.width

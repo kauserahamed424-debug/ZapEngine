@@ -28,7 +28,7 @@ import okhttp3.dnsoverhttps.DnsOverHttps
  * ExoPlayer (Media3) — the FAST engine.
  * Locked tuning from the BDTv dual-engine builds: LoadControl 15000/40000/1200/4000,
  * cookie support via a java.net CookieManager (DefaultHttpDataSource uses
- * HttpURLConnection, which honours the default CookieHandler), crop-to-fill (ZOOM).
+ * HttpURLConnection, which honours the default CookieHandler), stretch-to-fill (FILL: no bars, no crop).
  */
 @UnstableApi
 class ExoEngine(private val context: Context) : Engine {
@@ -54,7 +54,10 @@ class ExoEngine(private val context: Context) : Engine {
 
     private val playerView = PlayerView(context).apply {
         useController = false
-        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM // fill screen, no side bars
+        // House rule (all three engines): STRETCH the picture to exactly the
+        // surface size — no side bars, and nothing is ever cropped off the
+        // top/bottom (channel logos and score text stay fully visible).
+        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
     }
 
     override val view: View get() = playerView

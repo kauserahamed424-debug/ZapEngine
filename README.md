@@ -30,7 +30,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.5")
+    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.6")
 }
 ```
 
@@ -71,13 +71,13 @@ the **union** of all three engines.
 ## Locked per-engine settings
 
 - **ExoPlayer:** LoadControl 15000/40000/1200/4000 ms; cookies via
-  `java.net.CookieManager`; per-request Referer; resize ZOOM (fill).
+  `java.net.CookieManager`; per-request Referer; resize FILL (stretch to the exact surface — no bars, no crop).
 - **libVLC 3.6.2:** `:network-caching=1500`, `:http-reconnect`, Chrome UA,
-  per-media `:http-referrer`; crop-to-fill.
+  per-media `:http-referrer`; stretch-to-fill (surface aspect, no bars, no crop).
 - **libmpv 0.2.1:** bundled Mozilla `cacert.pem` + `tls-ca-file` +
   `tls-verify=yes`; `demuxer-lavf-o` = ONLY `live_start_index=-1`; probe
   tuning banned; cache readahead 30 s / 40 s / 64 MiB / pause-wait 1;
-  `hwdec=mediacodec-copy` + one internal software retry; `panscan=1.0`.
+  `hwdec=mediacodec-copy` + one internal software retry; `keepaspect=no` (stretch-to-fill, no bars, no crop).
 
 ## Usage
 
