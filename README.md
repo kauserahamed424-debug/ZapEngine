@@ -30,7 +30,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.8")
+    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.9")
 }
 ```
 
@@ -110,6 +110,13 @@ player.setDnsOverHttps(true)   // optional: ExoPlayer loads resolve via
                                // Google Public DNS over HTTPS (default OFF;
                                // VLC/MPV always use the system DNS — their
                                // native stacks expose no override)
+player.setLoadingView(myAnim)  // optional: YOUR OWN loading animation view.
+                               // It is reparented as the player's topmost
+                               // child (above the video, below everything
+                               // outside the player — e.g. your drawer) and
+                               // shown while a channel loads, so viewers
+                               // never stare at the previous channel's
+                               // frozen frame. Content/design stay yours.
 ```
 
 ## Inside the box

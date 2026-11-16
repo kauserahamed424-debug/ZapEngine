@@ -7,6 +7,7 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -94,6 +95,19 @@ class ZapEngineView @JvmOverloads constructor(
         visibility = GONE
     }
 
+    /**
+     * The HOST app's own loading view (e.g. BDTv's TV animation), handed
+     * in via [setLoadingView]. When set, it replaces the black cover as
+     * the loading surface: shown the instant a channel is requested —
+     * never the previous channel's frozen frame — and hidden the moment
+     * the new first frame lands. It lives as this view's topmost child,
+     * so it is always ABOVE the engine surfaces and always BELOW
+     * everything outside the player (the app's drawer included). The
+     * library only reparents it and toggles its visibility; its content
+     * and design are the host's and are never touched.
+     */
+    private var loadingView: View? = null
+
     // ---- race state (main thread only) ----
     private var generation: Long = 0
     private var currentReq: StreamRequest? = null
@@ -137,11 +151,29 @@ class ZapEngineView @JvmOverloads constructor(
     fun stopPlayback() {
         generation++
         userPaused = false
-        cover.visibility = GONE
+        hideLoadingSurface()
         cancelTimers()
         stopAllEngines()
         winner = null
         currentReq = null
+    }
+
+    /**
+     * Hand the player the host app's OWN loading view (its existing
+     * loading animation). The view is reparented as this player's
+     * topmost child and from then on the library owns its visibility:
+     * shown at every channel request, hidden at first frame, at final
+     * error, and on [stopPlayback]. Pass null to go back to the plain
+     * black cover. The view's content/design is never modified.
+     */
+    fun setLoadingView(view: View?) {
+        loadingView?.let { if (it.parent == this) removeView(it) }
+        loadingView = view
+        if (view != null) {
+            (view.parent as? ViewGroup)?.removeView(view)
+            addView(view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+            view.visibility = GONE
+        }
     }
 
     /** The engine currently on screen, or null. */
@@ -257,8 +289,7 @@ class ZapEngineView @JvmOverloads constructor(
         started.clear()
         startErrors.clear()
         // The old picture dies NOW, not when the new one arrives.
-        cover.visibility = VISIBLE
-        cover.bringToFront()
+        showLoadingSurface()
 
         val remembered = memory.get(req.channelKey)
         // The remembered route went through the proxy — begin there directly
@@ -353,6 +384,7 @@ class ZapEngineView @JvmOverloads constructor(
         }
         if (next == null) {
             val req = currentReq ?: return
+            hideLoadingSurface()
             log("gen=$gen ALL ROUTES FAILED: $allErrors")
             listener?.onError(req, allErrors.toList())
         } else {
@@ -405,7 +437,7 @@ class ZapEngineView @JvmOverloads constructor(
 
         // Winner takes the screen; losers stop in the same instant.
         engines.getValue(engine).view.bringToFront()
-        cover.visibility = GONE // winner is above it now; old picture already gone
+        hideLoadingSurface() // winner is on screen now; old picture already gone
         engines.forEach { (otherId, _) ->
             if (otherId != engine) stopEngineAsync(otherId, hideAfter = true)
         }
@@ -450,6 +482,24 @@ class ZapEngineView @JvmOverloads constructor(
     }
 
     // -------------------------------------------------------------- helpers
+
+    /** Show the host's loading view if one was set, else the black cover. */
+    private fun showLoadingSurface() {
+        val lv = loadingView
+        if (lv != null) {
+            cover.visibility = GONE
+            lv.visibility = VISIBLE
+            lv.bringToFront()
+        } else {
+            cover.visibility = VISIBLE
+            cover.bringToFront()
+        }
+    }
+
+    private fun hideLoadingSurface() {
+        cover.visibility = GONE
+        loadingView?.visibility = GONE
+    }
 
     private fun urlFor(req: StreamRequest, s: Step): String? = when (s) {
         Step.MAIN -> req.url
