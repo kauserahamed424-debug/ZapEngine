@@ -8,6 +8,8 @@ import android.util.AttributeSet
 import android.util.Log
 import android.view.View
 import android.widget.FrameLayout
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 /**
  * ONE player, THREE engines, working AT THE SAME TIME.
@@ -33,6 +35,15 @@ import android.widget.FrameLayout
  * Surface rule (learned the hard way in BDTv v20): an engine's view is made
  * VISIBLE before its load starts, and is hidden only AFTER that engine has
  * been fully stopped. The loading/playing engine's view is never hidden.
+ *
+ * UI-thread rule (1.0.8): libVLC and libmpv calls that can block (load,
+ * stop, release) NEVER run on the main thread — each engine has a
+ * dedicated background queue inside this view. Only ExoPlayer (a
+ * non-blocking, main-thread-bound API) and view visibility changes touch
+ * the UI thread, so the host app's drawer and animations stay smooth
+ * while channels switch. Before this fix, a channel tap ran VLC's
+ * blocking stop() on the UI thread: the whole app froze (drawer stuck),
+ * then the channel suddenly played once the thread came back.
  */
 class ZapEngineView @JvmOverloads constructor(
     context: Context,
@@ -62,6 +73,13 @@ class ZapEngineView @JvmOverloads constructor(
         mapOf(EngineId.EXO to exo, EngineId.VLC to vlc, EngineId.MPV to mpv)
 
     private var prepared = false
+
+    // Background work queues for the two native engines (1.0.8): every
+    // load/stop/release for libVLC and libmpv runs on the engine's own
+    // single thread, FIFO-ordered, so the UI thread NEVER waits on a
+    // native player.
+    private var vlcQueue: ExecutorService? = null
+    private var mpvQueue: ExecutorService? = null
 
     /**
      * Plain black cover shown the INSTANT a new channel is requested, so
@@ -131,8 +149,8 @@ class ZapEngineView @JvmOverloads constructor(
 
     // ------------------------------------------------------- transport API
 
-    private var userPaused = false
-    private var volumeLevel = 1f
+    @Volatile private var userPaused = false
+    @Volatile private var volumeLevel = 1f
     private var preMuteVolume = 1f
 
     /** True while playback is held by [pause]. */
@@ -204,7 +222,13 @@ class ZapEngineView @JvmOverloads constructor(
     fun release() {
         stopPlayback()
         if (prepared) {
-            engines.values.forEach { runCatching { it.release() } }
+            engines.forEach { (id, engine) ->
+                val queue = queueFor(id)
+                if (queue == null) runCatching { engine.release() }
+                else queue.execute { runCatching { engine.release() } }
+            }
+            vlcQueue?.shutdown(); vlcQueue = null
+            mpvQueue?.shutdown(); mpvQueue = null
             prepared = false
         }
     }
@@ -213,6 +237,16 @@ class ZapEngineView @JvmOverloads constructor(
 
     private fun ensurePrepared() {
         if (prepared) return
+        if (vlcQueue?.isShutdown != false) {
+            vlcQueue = Executors.newSingleThreadExecutor { r ->
+                Thread(r, "ZapEngine-VLC").apply { isDaemon = true }
+            }
+        }
+        if (mpvQueue?.isShutdown != false) {
+            mpvQueue = Executors.newSingleThreadExecutor { r ->
+                Thread(r, "ZapEngine-MPV").apply { isDaemon = true }
+            }
+        }
         engines.values.forEach { it.prepare(this) }
         prepared = true
     }
@@ -272,14 +306,30 @@ class ZapEngineView @JvmOverloads constructor(
         val engine = engines.getValue(engineId)
         engine.view.visibility = VISIBLE // surface rule: visible BEFORE load
         started += engineId
-        runCatching { engine.load(gen, url, req) }
-            .onFailure { onStartError(gen, engineId, "${engineId.name} load threw: ${it.message}") }
-            .onSuccess {
-                // Honour the transport state on every fresh load (volume
-                // level, and a pause() the host requested mid-race).
-                runCatching { engine.setVolume(volumeLevel) }
-                if (userPaused) runCatching { engine.pause() }
+        val queue = queueFor(engineId)
+        if (queue == null) {
+            // ExoPlayer: non-blocking API, bound to the main thread — inline.
+            runCatching { engine.load(gen, url, req) }
+                .onFailure { onStartError(gen, engineId, "${engineId.name} load threw: ${it.message}") }
+                .onSuccess { applyTransport(engine) }
+        } else {
+            // libVLC / libmpv: load() can BLOCK (VLC stops the previous
+            // stream inside load; both engines wind native threads down).
+            // It runs on the engine's own background queue, FIFO-ordered
+            // after any stop submitted earlier, so a channel tap never
+            // freezes the UI thread.
+            queue.execute {
+                runCatching { engine.load(gen, url, req) }
+                    .onFailure { onStartError(gen, engineId, "${engineId.name} load threw: ${it.message}") }
+                    .onSuccess { applyTransport(engine) }
             }
+        }
+    }
+
+    /** Honour the transport state on every fresh load (volume level, mid-race pause). */
+    private fun applyTransport(engine: Engine) {
+        runCatching { engine.setVolume(volumeLevel) }
+        if (userPaused) runCatching { engine.pause() }
     }
 
     private fun onStepDeadline(gen: Long) {
@@ -356,11 +406,8 @@ class ZapEngineView @JvmOverloads constructor(
         // Winner takes the screen; losers stop in the same instant.
         engines.getValue(engine).view.bringToFront()
         cover.visibility = GONE // winner is above it now; old picture already gone
-        engines.forEach { (otherId, other) ->
-            if (otherId != engine) {
-                runCatching { other.stop() }
-                other.view.visibility = INVISIBLE // safe: engine fully stopped
-            }
+        engines.forEach { (otherId, _) ->
+            if (otherId != engine) stopEngineAsync(otherId, hideAfter = true)
         }
 
         val viaProxy = step == Step.PROXY || step == Step.PROXY_BACKUP
@@ -412,7 +459,44 @@ class ZapEngineView @JvmOverloads constructor(
     }
 
     private fun stopAllEngines() {
-        engines.values.forEach { runCatching { it.stop() } }
+        engines.forEach { (id, engine) ->
+            val queue = queueFor(id)
+            if (queue == null) runCatching { engine.stop() }
+            else queue.execute { runCatching { engine.stop() } }
+        }
+    }
+
+    /**
+     * Stop one engine WITHOUT blocking the UI thread. ExoPlayer stops
+     * inline (its API is non-blocking). libVLC/libmpv stops run on the
+     * engine's own background queue; with [hideAfter], the engine's view
+     * is hidden only once the stop has actually finished — and only if
+     * the engine has not been re-launched meanwhile (the guard is checked
+     * on the main thread, where all race state lives).
+     */
+    private fun stopEngineAsync(id: EngineId, hideAfter: Boolean) {
+        val engine = engines.getValue(id)
+        val queue = queueFor(id)
+        if (queue == null) {
+            runCatching { engine.stop() }
+            if (hideAfter) engine.view.visibility = INVISIBLE
+            return
+        }
+        queue.execute {
+            runCatching { engine.stop() }
+            if (hideAfter) {
+                main.post {
+                    if (id !in started && winner != id) engine.view.visibility = INVISIBLE
+                }
+            }
+        }
+    }
+
+    /** Background queue for the native engines; ExoPlayer returns null (main thread). */
+    private fun queueFor(id: EngineId): ExecutorService? = when (id) {
+        EngineId.VLC -> vlcQueue
+        EngineId.MPV -> mpvQueue
+        EngineId.EXO -> null
     }
 
     private fun cancelTimers() {

@@ -30,7 +30,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.7")
+    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.8")
 }
 ```
 
@@ -132,6 +132,11 @@ player.setDnsOverHttps(true)   // optional: ExoPlayer loads resolve via
   previous channel's last frame; it lifts the moment the new first
   frame lands. Rapid drawer taps can no longer freeze the picture or
   the player
+- **UI thread never waits** — libVLC/libmpv load/stop/release calls run
+  on per-engine background queues (FIFO), never on the main thread.
+  VLC's blocking stop() used to freeze the whole app at every channel
+  tap — drawer stuck, then the channel suddenly playing; now switching
+  stays smooth while the native engines work in the background
 - **Transport controls** — pause / resume / volume / mute on the view,
   applied to whichever engine is on screen and kept across switches
 
