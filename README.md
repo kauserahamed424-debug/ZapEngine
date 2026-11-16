@@ -30,7 +30,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.6")
+    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.7")
 }
 ```
 
@@ -127,6 +127,11 @@ player.setDnsOverHttps(true)   // optional: ExoPlayer loads resolve via
 - **Thread-safe race core** — engine callbacks are marshalled to the main
   thread; rapid channel zapping coalesces through a generation counter,
   so stale loads can never jam the player
+- **No frozen leftovers** — the instant a channel is tapped, a black
+  cover (a plain view, never touching the engines' surfaces) hides the
+  previous channel's last frame; it lifts the moment the new first
+  frame lands. Rapid drawer taps can no longer freeze the picture or
+  the player
 - **Transport controls** — pause / resume / volume / mute on the view,
   applied to whichever engine is on screen and kept across switches
 

@@ -1,10 +1,12 @@
 package com.bdtv.zapengine
 
 import android.content.Context
+import android.graphics.Color
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.util.Log
+import android.view.View
 import android.widget.FrameLayout
 
 /**
@@ -61,6 +63,19 @@ class ZapEngineView @JvmOverloads constructor(
 
     private var prepared = false
 
+    /**
+     * Plain black cover shown the INSTANT a new channel is requested, so
+     * the previous channel's frozen last frame never sits on screen while
+     * the next one loads (the classic "tap holds the old picture" defect).
+     * It is a normal View — hiding/showing it never touches any engine's
+     * SurfaceView, so the surface rule is untouched. The winner's view is
+     * lifted above it at first frame and it is hidden in the same instant.
+     */
+    private val cover = View(context).apply {
+        setBackgroundColor(Color.BLACK)
+        visibility = GONE
+    }
+
     // ---- race state (main thread only) ----
     private var generation: Long = 0
     private var currentReq: StreamRequest? = null
@@ -76,9 +91,11 @@ class ZapEngineView @JvmOverloads constructor(
     init {
         // All three surfaces live in this layout for the view's whole life.
         // Stacking order is managed with bringToFront() when an engine wins.
+        setBackgroundColor(Color.BLACK)
         addView(mpv.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(vlc.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(exo.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(cover, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 
     // ------------------------------------------------------------------ API
@@ -102,6 +119,7 @@ class ZapEngineView @JvmOverloads constructor(
     fun stopPlayback() {
         generation++
         userPaused = false
+        cover.visibility = GONE
         cancelTimers()
         stopAllEngines()
         winner = null
@@ -204,6 +222,9 @@ class ZapEngineView @JvmOverloads constructor(
         step = newStep
         started.clear()
         startErrors.clear()
+        // The old picture dies NOW, not when the new one arrives.
+        cover.visibility = VISIBLE
+        cover.bringToFront()
 
         val remembered = memory.get(req.channelKey)
         // The remembered route went through the proxy — begin there directly
@@ -334,6 +355,7 @@ class ZapEngineView @JvmOverloads constructor(
 
         // Winner takes the screen; losers stop in the same instant.
         engines.getValue(engine).view.bringToFront()
+        cover.visibility = GONE // winner is above it now; old picture already gone
         engines.forEach { (otherId, other) ->
             if (otherId != engine) {
                 runCatching { other.stop() }
