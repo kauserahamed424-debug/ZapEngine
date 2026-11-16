@@ -10,6 +10,30 @@ instant.
 
 > Created by **Kauser Ahamed** — the playback engine behind the BDTv app.
 
+[![JitPack](https://jitpack.io/v/kauserahamed424-debug/ZapEngine.svg)](https://jitpack.io/#kauserahamed424-debug/ZapEngine)
+
+## Get it (JitPack)
+
+In your project's `settings.gradle.kts`:
+
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
+```
+
+In your app module's `build.gradle.kts`:
+
+```kotlin
+dependencies {
+    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.0")
+}
+```
+
 ## Why a race?
 
 | Engine | Strength | Weakness |
