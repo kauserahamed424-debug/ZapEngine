@@ -43,6 +43,21 @@ class VlcEngine(private val context: Context) : Engine {
             if (gen < 0) return@setEventListener
             when (event.type) {
                 MediaPlayer.Event.Playing -> {
+                    // Captions/subtitles OFF, always (owner's rule): VLC
+                    // otherwise auto-selects a stream's subtitle/CC track.
+                    // Tracks only exist once playback starts, so this
+                    // cannot be done in load().
+                    runCatching { mp.setSpuTrack(-1) }
+                    // Audio-only guard: after a stop/start cycle VLC can
+                    // leave the VIDEO track deselected — audio plays, no
+                    // picture, and NO error is reported. If no video track
+                    // is selected, re-enable and select the first one.
+                    runCatching {
+                        if (mp.getVideoTrack() == -1) {
+                            mp.setVideoTrackEnabled(true)
+                            mp.videoTracks?.firstOrNull()?.let { mp.setVideoTrack(it.id) }
+                        }
+                    }
                     if (!frameReported) {
                         frameReported = true
                         callback.onFirstFrame(gen, id)

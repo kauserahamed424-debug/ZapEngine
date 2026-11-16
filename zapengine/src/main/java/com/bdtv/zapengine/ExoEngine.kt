@@ -2,6 +2,7 @@ package com.bdtv.zapengine
 
 import android.content.Context
 import android.view.View
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -76,6 +77,13 @@ class ExoEngine(private val context: Context) : Engine {
             .build()
             .also { exo ->
                 playerView.player = exo
+                // Captions/subtitles OFF, always (owner's rule): some
+                // channels carry a DEFAULT=YES subtitle or CC track that
+                // engines otherwise auto-select and render.
+                exo.trackSelectionParameters = exo.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                    .build()
                 exo.addListener(object : Player.Listener {
                     override fun onRenderedFirstFrame() {
                         val gen = currentGen

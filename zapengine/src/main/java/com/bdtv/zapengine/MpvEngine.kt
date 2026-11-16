@@ -201,6 +201,9 @@ class ZapMpvView(context: Context, attrs: AttributeSet? = null) :
         mpv.setOptionString("keepaspect", "no")
         mpv.setOptionString("panscan", "0.0")
         mpv.setOptionString("keep-open", "yes")
+        // Captions/subtitles OFF, always (owner's rule): never auto-select
+        // a subtitle or embedded closed-caption track.
+        mpv.setOptionString("sid", "no")
         mpv.setOptionString("msg-level", "all=warn")
     }
 

@@ -30,7 +30,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.9")
+    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.10")
 }
 ```
 
@@ -144,6 +144,12 @@ player.setLoadingView(myAnim)  // optional: YOUR OWN loading animation view.
   VLC's blocking stop() used to freeze the whole app at every channel
   tap — drawer stuck, then the channel suddenly playing; now switching
   stays smooth while the native engines work in the background
+- **Captions always OFF** — subtitle/closed-caption tracks are never
+  auto-selected in any engine (ExoPlayer: text tracks disabled;
+  libVLC: SPU track set to none at playback start; libmpv: `sid=no`),
+  even on channels whose playlists mark a caption track DEFAULT=YES.
+  libVLC also re-asserts its video track at playback start, guarding
+  against its known silent audio-only mode after stop/start cycles
 - **Transport controls** — pause / resume / volume / mute on the view,
   applied to whichever engine is on screen and kept across switches
 
