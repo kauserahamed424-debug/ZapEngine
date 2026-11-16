@@ -30,7 +30,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.3")
+    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.4")
 }
 ```
 

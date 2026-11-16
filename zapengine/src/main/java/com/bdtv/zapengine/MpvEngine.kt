@@ -149,6 +149,18 @@ class MpvEngine(private val context: Context) : Engine {
         runCatching { mpv.command("stop") }
     }
 
+    override fun pause() {
+        runCatching { mpv.setPropertyBoolean("pause", true) }
+    }
+
+    override fun resume() {
+        runCatching { mpv.setPropertyBoolean("pause", false) }
+    }
+
+    override fun setVolume(volume: Float) {
+        runCatching { mpv.setPropertyDouble("volume", volume.coerceIn(0f, 1f) * 100.0) }
+    }
+
     override fun release() {
         stop()
         runCatching { mpv.removeObserver(eventObserver) }

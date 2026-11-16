@@ -89,6 +89,7 @@ class ZapEngineView @JvmOverloads constructor(
         val gen = ++generation
         currentReq = req
         winner = null
+        userPaused = false // a fresh channel always starts playing
         recoveryUsed = false
         allErrors.clear()
         stopAllEngines()
@@ -100,6 +101,7 @@ class ZapEngineView @JvmOverloads constructor(
     /** Stop everything and go idle. */
     fun stopPlayback() {
         generation++
+        userPaused = false
         cancelTimers()
         stopAllEngines()
         winner = null
@@ -108,6 +110,52 @@ class ZapEngineView @JvmOverloads constructor(
 
     /** The engine currently on screen, or null. */
     val activeEngine: EngineId? get() = winner
+
+    // ------------------------------------------------------- transport API
+
+    private var userPaused = false
+    private var volumeLevel = 1f
+    private var preMuteVolume = 1f
+
+    /** True while playback is held by [pause]. */
+    val isPaused: Boolean get() = userPaused
+
+    /** True when a channel is on screen and not paused. */
+    val isPlaying: Boolean get() = winner != null && !userPaused
+
+    /**
+     * Pause the picture. Every engine is paused (the winner freezes on
+     * screen); a race still in progress stays loaded and paused.
+     */
+    fun pause() {
+        userPaused = true
+        engines.values.forEach { runCatching { it.pause() } }
+    }
+
+    /** Resume after [pause]. */
+    fun resume() {
+        userPaused = false
+        engines.values.forEach { runCatching { it.resume() } }
+    }
+
+    /**
+     * Set output volume on every engine, 0.0 (mute) .. 1.0 (full).
+     * The level is remembered and applied to every future load as well.
+     */
+    fun setVolume(volume: Float) {
+        volumeLevel = volume.coerceIn(0f, 1f)
+        engines.values.forEach { runCatching { it.setVolume(volumeLevel) } }
+    }
+
+    /** Mute / unmute. Unmute restores the level from before the mute. */
+    fun setMuted(muted: Boolean) {
+        if (muted) {
+            if (volumeLevel > 0f) preMuteVolume = volumeLevel
+            setVolume(0f)
+        } else {
+            setVolume(preMuteVolume)
+        }
+    }
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -192,6 +240,12 @@ class ZapEngineView @JvmOverloads constructor(
         started += engineId
         runCatching { engine.load(gen, url, req) }
             .onFailure { onStartError(gen, engineId, "${engineId.name} load threw: ${it.message}") }
+            .onSuccess {
+                // Honour the transport state on every fresh load (volume
+                // level, and a pause() the host requested mid-race).
+                runCatching { engine.setVolume(volumeLevel) }
+                if (userPaused) runCatching { engine.pause() }
+            }
     }
 
     private fun onStepDeadline(gen: Long) {
@@ -240,6 +294,9 @@ class ZapEngineView @JvmOverloads constructor(
         val req = currentReq ?: return
         winner = engine
         cancelTimers()
+        // An engine can unpause itself internally (e.g. MPV's decoder retry)
+        // — re-apply a host-requested pause to the winner.
+        if (userPaused) runCatching { engines.getValue(engine).pause() }
 
         // Winner takes the screen; losers stop in the same instant.
         engines.getValue(engine).view.bringToFront()

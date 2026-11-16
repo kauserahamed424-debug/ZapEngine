@@ -61,6 +61,15 @@ interface Engine {
     /** Stop playback and clear the picture. The view itself stays VISIBLE (surface rule). */
     fun stop()
 
+    /** Pause playback, keeping the current load alive; [resume] continues it. */
+    fun pause()
+
+    /** Resume playback after [pause]. */
+    fun resume()
+
+    /** Set output volume, 0.0 (mute) .. 1.0 (full). */
+    fun setVolume(volume: Float)
+
     /** Free the native player. Called once, when the host is destroyed. */
     fun release()
 }

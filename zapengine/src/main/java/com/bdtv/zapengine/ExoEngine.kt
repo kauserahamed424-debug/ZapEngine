@@ -106,6 +106,18 @@ class ExoEngine(private val context: Context) : Engine {
         player?.clearMediaItems()
     }
 
+    override fun pause() {
+        player?.pause()
+    }
+
+    override fun resume() {
+        player?.play()
+    }
+
+    override fun setVolume(volume: Float) {
+        player?.volume = volume.coerceIn(0f, 1f)
+    }
+
     override fun release() {
         stop()
         playerView.player = null

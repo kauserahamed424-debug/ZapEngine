@@ -97,6 +97,18 @@ class VlcEngine(private val context: Context) : Engine {
         mediaPlayer?.stop()
     }
 
+    override fun pause() {
+        mediaPlayer?.pause()
+    }
+
+    override fun resume() {
+        mediaPlayer?.play()
+    }
+
+    override fun setVolume(volume: Float) {
+        mediaPlayer?.setVolume((volume.coerceIn(0f, 1f) * 100).toInt())
+    }
+
     override fun release() {
         stop()
         mediaPlayer?.detachViews()
