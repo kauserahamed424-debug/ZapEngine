@@ -23,8 +23,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
 }
 
@@ -43,13 +45,13 @@ dependencies {
 }
 
 // JitPack publishing — consumers add the library with one line:
-//   implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.2")
+//   implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.3")
 publishing {
     publications {
         register<MavenPublication>("release") {
             groupId = "com.github.kauserahamed424-debug"
             artifactId = "ZapEngine"
-            version = "1.0.2"
+            version = "1.0.3"
             afterEvaluate {
                 from(components["release"])
             }
