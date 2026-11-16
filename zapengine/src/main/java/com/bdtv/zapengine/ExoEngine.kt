@@ -6,7 +6,9 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -15,6 +17,12 @@ import androidx.media3.ui.PlayerView
 import java.net.CookieHandler
 import java.net.CookieManager
 import java.net.CookiePolicy
+import java.net.InetAddress
+import java.util.concurrent.TimeUnit
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.JavaNetCookieJar
+import okhttp3.OkHttpClient
+import okhttp3.dnsoverhttps.DnsOverHttps
 
 /**
  * ExoPlayer (Media3) — the FAST engine.
@@ -32,6 +40,18 @@ class ExoEngine(private val context: Context) : Engine {
     private var currentGen: Long = -1
     private var frameReported = false
 
+    /** One cookie store, shared by BOTH HTTP stacks (see [load]). */
+    private val cookieManager = CookieManager(null, CookiePolicy.ACCEPT_ALL)
+
+    /**
+     * DNS-over-HTTPS switch, set by [ZapEngineView.setDnsOverHttps].
+     * When ON, loads go through OkHttp resolving via Google Public DNS
+     * over HTTPS; when OFF (default), the classic HttpURLConnection stack
+     * and the Android system DNS are used — the proven BDTv behaviour.
+     */
+    @Volatile var dnsOverHttps: Boolean = false
+    private var dohClient: OkHttpClient? = null
+
     private val playerView = PlayerView(context).apply {
         useController = false
         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM // fill screen, no side bars
@@ -43,7 +63,7 @@ class ExoEngine(private val context: Context) : Engine {
         this.callback = callback
         // One cookie store for the whole app process (alixbd-type sources set cookies).
         if (CookieHandler.getDefault() == null) {
-            CookieHandler.setDefault(CookieManager(null, CookiePolicy.ACCEPT_ALL))
+            CookieHandler.setDefault(cookieManager)
         }
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(15_000, 40_000, 1_200, 4_000)
@@ -80,12 +100,22 @@ class ExoEngine(private val context: Context) : Engine {
 
         val headers = mutableMapOf<String, String>()
         req.referer?.let { headers["Referer"] = it }
-        val factory = DefaultHttpDataSource.Factory()
-            .setUserAgent(req.userAgent ?: DEFAULT_UA)
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(10_000)
-            .setReadTimeoutMs(10_000)
-        if (headers.isNotEmpty()) factory.setDefaultRequestProperties(headers)
+        val ua = req.userAgent ?: DEFAULT_UA
+        // Two HTTP stacks, one cookie store: default = HttpURLConnection
+        // (system DNS); DoH mode = OkHttp + DNS-over-HTTPS.
+        val factory: DataSource.Factory = if (dnsOverHttps) {
+            OkHttpDataSource.Factory(dohClient()).apply {
+                setUserAgent(ua)
+                if (headers.isNotEmpty()) setDefaultRequestProperties(headers)
+            }
+        } else {
+            DefaultHttpDataSource.Factory()
+                .setUserAgent(ua)
+                .setAllowCrossProtocolRedirects(true)
+                .setConnectTimeoutMs(10_000)
+                .setReadTimeoutMs(10_000)
+                .apply { if (headers.isNotEmpty()) setDefaultRequestProperties(headers) }
+        }
 
         val mediaItem = MediaItem.fromUri(url)
         val source = if (url.contains(".m3u8", ignoreCase = true)) {
@@ -97,6 +127,29 @@ class ExoEngine(private val context: Context) : Engine {
         exo.setMediaSource(source)
         exo.prepare()
         exo.playWhenReady = true
+    }
+
+    /** OkHttp client resolving through Google Public DNS over HTTPS. Built once. */
+    private fun dohClient(): OkHttpClient {
+        dohClient?.let { return it }
+        val dns = DnsOverHttps.Builder()
+            .client(OkHttpClient())
+            .url("https://dns.google/dns-query".toHttpUrl())
+            .bootstrapDnsHosts(
+                InetAddress.getByName("8.8.8.8"),
+                InetAddress.getByName("8.8.4.4"),
+                InetAddress.getByName("2001:4860:4860::8888"),
+                InetAddress.getByName("2001:4860:4860::8844")
+            )
+            .build()
+        val client = OkHttpClient.Builder()
+            .dns(dns)
+            .cookieJar(JavaNetCookieJar(cookieManager))
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .build()
+        dohClient = client
+        return client
     }
 
     override fun stop() {

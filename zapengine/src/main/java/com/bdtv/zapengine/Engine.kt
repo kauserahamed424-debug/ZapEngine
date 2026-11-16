@@ -30,7 +30,7 @@ data class StreamRequest(
     val preferredEngine: EngineId? = null
 )
 
-/** Callbacks every engine reports through. All calls arrive on the main thread. */
+/** Callbacks every engine reports through. Calls may arrive on ANY thread (each engine has its own event thread); [ZapEngineView] marshals them to the main thread before touching race state. */
 interface EngineCallback {
     /** This engine rendered its first frame for generation [gen]. */
     fun onFirstFrame(gen: Long, engine: EngineId)

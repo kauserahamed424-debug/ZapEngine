@@ -157,6 +157,19 @@ class ZapEngineView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * DNS-over-HTTPS (Google Public DNS) for ExoPlayer loads. Default OFF —
+     * every engine then uses the Android system DNS, exactly as before.
+     * Honest limit: libVLC and libmpv resolve names inside their native
+     * stacks and expose no override, so this applies to ExoPlayer only.
+     */
+    fun setDnsOverHttps(enabled: Boolean) {
+        exo.dnsOverHttps = enabled
+    }
+
+    /** Whether DNS-over-HTTPS is currently enabled (ExoPlayer loads only). */
+    val dnsOverHttpsEnabled: Boolean get() = exo.dnsOverHttps
+
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         // Pre-warm all three engines at attach time (parent attaches before
@@ -288,8 +301,29 @@ class ZapEngineView @JvmOverloads constructor(
     }
 
     // -------------------------------------------------------- engine events
+    //
+    // Engine callbacks arrive on each engine's OWN thread (VLC/MPV native
+    // event threads, Exo's playback thread). ALL race state lives on the
+    // main thread, so every callback is marshalled there first — this is
+    // what keeps rapid channel zapping free of cross-thread races.
+
+    private fun onMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) block() else main.post(block)
+    }
 
     override fun onFirstFrame(gen: Long, engine: EngineId) {
+        onMain { handleFirstFrame(gen, engine) }
+    }
+
+    override fun onStartError(gen: Long, engine: EngineId, error: String) {
+        onMain { handleStartError(gen, engine, error) }
+    }
+
+    override fun onPlaybackError(gen: Long, engine: EngineId, error: String) {
+        onMain { handlePlaybackError(gen, engine, error) }
+    }
+
+    private fun handleFirstFrame(gen: Long, engine: EngineId) {
         if (gen != generation || winner != null) return // stale, or another engine already won
         val req = currentReq ?: return
         winner = engine
@@ -320,7 +354,7 @@ class ZapEngineView @JvmOverloads constructor(
         listener?.onPlaying(req, engine)
     }
 
-    override fun onStartError(gen: Long, engine: EngineId, error: String) {
+    private fun handleStartError(gen: Long, engine: EngineId, error: String) {
         if (gen != generation || winner != null) return
         startErrors[engine] = error
         log("gen=$gen startError $engine step=$step: $error")
@@ -330,7 +364,7 @@ class ZapEngineView @JvmOverloads constructor(
         checkStepExhausted(gen)
     }
 
-    override fun onPlaybackError(gen: Long, engine: EngineId, error: String) {
+    private fun handlePlaybackError(gen: Long, engine: EngineId, error: String) {
         if (gen != generation || winner != engine) return
         val req = currentReq ?: return
         allErrors += "$engine mid-play: $error"

@@ -36,6 +36,11 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.8.0")
     implementation("androidx.media3:media3-ui:1.8.0")
     implementation("androidx.media3:media3-datasource:1.8.0")
+    // OkHttp stack — used ONLY when DNS-over-HTTPS is enabled (ExoEngine)
+    implementation("androidx.media3:media3-datasource-okhttp:1.8.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-urlconnection:4.12.0")
 
     // libVLC — broad-coverage engine (exact version used by BDTv dual-engine builds)
     implementation("org.videolan.android:libvlc-all:3.6.2")
@@ -45,13 +50,13 @@ dependencies {
 }
 
 // JitPack publishing — consumers add the library with one line:
-//   implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.4")
+//   implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.5")
 publishing {
     publications {
         register<MavenPublication>("release") {
             groupId = "com.github.kauserahamed424-debug"
             artifactId = "ZapEngine"
-            version = "1.0.4"
+            version = "1.0.5"
             afterEvaluate {
                 from(components["release"])
             }

@@ -30,7 +30,7 @@ In your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.4")
+    implementation("com.github.kauserahamed424-debug:ZapEngine:1.0.5")
 }
 ```
 
@@ -100,7 +100,35 @@ player.play(
         preferredEngine = EngineId.VLC                // hint for known-hard hosts
     )
 )
+
+// Transport controls — real calls into whichever engine is on screen:
+player.pause()                 // freeze the picture
+player.resume()                // continue
+player.setVolume(0.5f)         // 0.0 .. 1.0, remembered across channel switches
+player.setMuted(true)          // / false restores the previous level
+player.setDnsOverHttps(true)   // optional: ExoPlayer loads resolve via
+                               // Google Public DNS over HTTPS (default OFF;
+                               // VLC/MPV always use the system DNS — their
+                               // native stacks expose no override)
 ```
+
+## Inside the box
+
+- **Three engines racing** every route, first frame wins (see above)
+- **Failover chain** — main → backup → local-proxy → proxy-backup, then a
+  real error list (every engine's own error text, never a guess)
+- **Engine memory** — per-channel winning engine + transport, remembered
+- **HLS everywhere**, live streams start at the live edge
+- **Cookies, Referer and User-Agent** honoured by all three engines
+  (alixbd-type sources need them)
+- **TLS that works in MPV** — a Mozilla CA bundle ships in the library;
+  MPV cannot read Android's CA store on its own
+- **Locked buffer/reconnect tuning** per engine (proven on live TV)
+- **Thread-safe race core** — engine callbacks are marshalled to the main
+  thread; rapid channel zapping coalesces through a generation counter,
+  so stale loads can never jam the player
+- **Transport controls** — pause / resume / volume / mute on the view,
+  applied to whichever engine is on screen and kept across switches
 
 ## Build
 
